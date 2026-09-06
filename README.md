@@ -1,6 +1,8 @@
-# DeepSeek Harness Web Launcher (macOS)
+# DeepSeek Harness Web Launcher (macOS / Windows)
 
 一个极简的 macOS 启动器:点击图标打开 DeepSeek Harness Web 界面;服务未运行时自动拉起 `dsh web`;服务运行期间程序坞常驻、菜单栏显示鲸鱼图标;服务停止后自动退出;单实例防重复。
+
+> 本仓库同时提供 **Windows 系统托盘版**,见 [`windows/`](./windows/)。两版核心逻辑一致:托盘图标存在 ⇔ dsh 在后台运行;右键菜单仅「打开 / 退出」。Windows 版采用 WPF + 原生 Win32 托盘(与 CquAutoLogin 同款深色菜单),详见 [`windows/README.md`](./windows/README.md)。
 
 ## 功能
 

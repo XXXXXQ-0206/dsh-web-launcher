@@ -1,3 +1,8 @@
 dist/
 *.iconset/
 .DS_Store
+
+# Windows 版构建产物
+windows/bin/
+windows/obj/
+windows/dist/

@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>DshWebLauncher</AssemblyName>
+    <RootNamespace>DshWebLauncher</RootNamespace>
+    <ApplicationIcon>assets\dsh_app.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="assets\whale_running.ico" />
+    <EmbeddedResource Include="assets\whale_stopped.ico" />
+  </ItemGroup>
+
+</Project>
