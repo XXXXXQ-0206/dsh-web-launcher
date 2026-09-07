@@ -557,6 +557,19 @@ internal static class Program
             var owner = FindTcpOwner(Port);
             if (owner > 0 && owner != Environment.ProcessId)
                 KillTree(owner);
+            // 确保端口真正释放后再返回，避免重启/退出时残留孤儿、产生第二个 dsh（EADDRINUSE）
+            WaitPortDown();
+        }
+
+        private static void WaitPortDown()
+        {
+            var deadline = DateTime.Now.AddSeconds(6);
+            while (DateTime.Now < deadline)
+            {
+                if (!IsServiceUp())
+                    return;
+                Thread.Sleep(150);
+            }
         }
 
         private static int FindTcpOwner(int port)
