@@ -15,6 +15,7 @@ internal static class Program
     private const int Port = 3080;
     private const int ProbeTimeoutMs = 2000;
     private const int BootTimeoutSec = 90;
+    private const int MaxStartAttempts = 4;
     private const string MutexName = @"Local\DshWebLauncher.Singleton";
     private const string ActivateSignalName = @"Local\DshWebLauncher.Activate";
     private const string QuitSignalName = @"Local\DshWebLauncher.Quit";
@@ -332,8 +333,9 @@ internal static class Program
         private readonly CancellationTokenSource _cts = new();
         private EventWaitHandle? _activate;
         private EventWaitHandle? _quit;
-        private bool _starting;
-        private bool _startedByUs;
+    private bool _starting;
+    private int _startAttempts;
+    private bool _startedByUs;
         private bool _openedAfterStart;
         private bool _everUp;
         private DateTime _startedAt = DateTime.MinValue;
@@ -356,6 +358,7 @@ internal static class Program
             _tray = new DshTrayIconService(LoadTrayIcon());
             _tray.OpenRequested += () => OpenPage(_startedByUs);
             _tray.ExitRequested += () => ExitLauncher(stopService: true);
+            _tray.RestartRequested += RestartDsh;
 
             // 3) 监听来自第二实例的信号
             var th = new Thread(() => ListenForSignals()) { IsBackground = true, Name = "DshWebLauncher.SignalListener" };
@@ -420,6 +423,27 @@ internal static class Program
                 if (_starting)
                 {
                     _timer.Interval = 400;
+                    // dsh 启动存在间歇性的 Node ESM/CJS 加载竞态（ERR_INTERNAL_ASSERTION，
+                    // “Cannot require() ES Module ... not yet fully loaded”），进程会提前退出。
+                    // 检测到启动中的 dsh 进程退出且端口未就绪时自动重启重试。
+                    if (_dshProcess is { HasExited: true })
+                    {
+                        if (_startAttempts < MaxStartAttempts)
+                        {
+                            _startAttempts++;
+                            _startedAt = DateTime.Now;
+                            _openedAfterStart = false;
+                            if (!StartDsh())
+                            {
+                                ShowFatal("未找到 dsh 命令。\n\n请先安装 DeepSeek Harness，或把 dsh 加入 PATH 后重试。");
+                                ExitLauncher(stopService: false);
+                            }
+                            return;
+                        }
+                        ShowFatal($"DeepSeek Harness 启动失败（已重试 {_startAttempts} 次）。\n\n请查看日志：\n{LogPath}");
+                        ExitLauncher(stopService: true);
+                        return;
+                    }
                     if ((DateTime.Now - _startedAt).TotalSeconds > BootTimeoutSec)
                     {
                         ShowFatal($"DeepSeek Harness 启动超时。\n\n请查看日志：\n{LogPath}");
@@ -443,6 +467,7 @@ internal static class Program
             if (_starting)
                 return;
             _starting = true;
+            _startAttempts = 0;
             _startedByUs = true;
             _startedAt = DateTime.Now;
             _openedAfterStart = false;
@@ -491,6 +516,23 @@ internal static class Program
                 ShowFatal($"无法启动 DeepSeek Harness：{ex.Message}");
                 return false;
             }
+        }
+
+        /// <summary>重启 dsh：关闭旧页面、停止服务、重新拉起，启动器保持运行。</summary>
+        private void RestartDsh()
+        {
+            if (_forceShutdown)
+                return;
+            CloseDshBrowserWindows();   // 关闭旧的 dsh 浏览器窗口（重启后重新打开）
+            StopDsh();                  // 杀掉当前 dsh 进程树
+            _starting = false;
+            _startedByUs = false;
+            _openedAfterStart = false;
+            _everUp = false;
+            _startAttempts = 0;
+            _downTicks = 0;
+            _tray?.HideIcon();
+            StartService();             // 重新拉起 dsh，就绪后由 OnTick 亮图标并打开页面
         }
 
         private void ExitLauncher(bool stopService)
