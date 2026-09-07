@@ -40,6 +40,7 @@ public sealed class DshTrayIconService : IDisposable
     private const int DwmwaUseImmersiveDarkMode = 20;
 
     private const int IdOpen = 1001;
+    private const int IdRestart = 1002;
     private const int IdExit = 1999;
 
     private readonly string _windowClassName = $"DshWebLauncher.TrayWindow.{Guid.NewGuid():N}";
@@ -70,6 +71,9 @@ public sealed class DshTrayIconService : IDisposable
 
     /// <summary>退出启动器。</summary>
     public event Action? ExitRequested;
+
+    /// <summary>重启 dsh（停止并重新拉起服务）。</summary>
+    public event Action? RestartRequested;
 
     public void ShowContextMenu() => ShowContextMenuCore();
 
@@ -148,6 +152,7 @@ public sealed class DshTrayIconService : IDisposable
         try
         {
             AppendActionItem(menu, IdOpen, "打开 DeepSeek Harness");
+            AppendActionItem(menu, IdRestart, "重启 DeepSeek Harness");
             AppendSeparator(menu);
             AppendActionItem(menu, IdExit, "退出");
             return menu;
@@ -301,6 +306,9 @@ public sealed class DshTrayIconService : IDisposable
         {
             case IdOpen:
                 OpenRequested?.Invoke();
+                break;
+            case IdRestart:
+                RestartRequested?.Invoke();
                 break;
             case IdExit:
                 ExitRequested?.Invoke();
