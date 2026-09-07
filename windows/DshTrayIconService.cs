@@ -151,8 +151,8 @@ public sealed class DshTrayIconService : IDisposable
 
         try
         {
-            AppendActionItem(menu, IdOpen, "打开 DeepSeek Harness");
-            AppendActionItem(menu, IdRestart, "重启 DeepSeek Harness");
+            AppendActionItem(menu, IdOpen, "打开");
+            AppendActionItem(menu, IdRestart, "重启");
             AppendSeparator(menu);
             AppendActionItem(menu, IdExit, "退出");
             return menu;
