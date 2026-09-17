@@ -21,7 +21,7 @@
 
 给 **DeepSeek Harness Web**（`dsh web`）做的**极简一键启动器**，macOS + Windows 双平台。
 
-> 核心约定：**托盘 / 菜单栏图标存在 ⇔ `dsh` 在后台运行。** 未运行则自动拉起 `dsh web`；就绪后在浏览器打开；服务停止后图标自动消失；右键仅「打开 / 退出」；退出会连同 `dsh` 一并停止，并关闭对应的浏览器窗口。
+> 核心约定：**托盘 / 菜单栏图标存在 ⇔ `dsh` 在后台运行。** 未运行则自动拉起 `dsh web`；就绪后在浏览器打开；服务停止后图标自动消失；右键仅「打开 / 重启 / 退出」；退出会连同 `dsh` 一并停止，并关闭对应的浏览器窗口。
 
 ---
 
@@ -40,6 +40,7 @@
 - **自动启动**：`dsh` 未运行时自动执行 `dsh web --no-open`，就绪后打开浏览器。
 - **状态即图标**：图标存在 = `dsh` 在后台；服务停止后图标随之消失。
 - **单实例**：重复启动只唤醒已有实例，不会重复拉起 `dsh`。
+- **静默启动**：`--silent` 只亮托盘、后台拉起 `dsh`，不打开浏览器页面 —— 专供开机自启（Windows 版）。
 - **令牌登录**：优先用启动日志里的 `http://127.0.0.1:3080/?token=...` 打开，无 cookie 也能登录。
 - **退出清理**：退出时关闭标题为 `DeepSeek Harness` 的浏览器窗口（Windows 版）。
 
@@ -52,9 +53,10 @@
 ### Windows
 
 - 纯系统托盘图标（白色鲸鱼），无任务栏按钮、无控制台窗口。
-- 右键仅「打开 DeepSeek Harness / 退出」，原生 Win32 菜单 + DWM 沉浸式深色模式。
+- 右键仅「打开 / 重启 / 退出」，原生 Win32 菜单 + DWM 沉浸式深色模式。
 - 用 `GetExtendedTcpTable` 瞬时探测端口，启动更快（启动器自身约 0.3s）。
 - 退出会连同 dsh 进程一起停止，并关闭对应的 dsh 浏览器窗口。
+- `--silent` 支持开机自启：登录后只出现托盘图标，不弹浏览器窗口。
 
 ## 🖼 界面
 
@@ -81,6 +83,11 @@ macOS 菜单栏鲸鱼 · Windows 托盘 · 右键深色菜单
 cd windows
 pwsh -NoProfile -ExecutionPolicy Bypass -File build.ps1            # 构建到 dist\DshWebLauncher.exe
 pwsh -NoProfile -ExecutionPolicy Bypass -File create_shortcut.ps1  # 创建桌面「DeepSeek Harness」快捷方式
+
+# 可选：开机自启（后台驻留，不弹浏览器）
+$exe = (Resolve-Path 'dist\DshWebLauncher.exe').Path
+New-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' `
+    -Name 'DeepSeek Harness' -Value "`"$exe`" --silent" -PropertyType String -Force
 ```
 
 也可直接从 **Releases** 下载 Windows 预编译包。
@@ -96,7 +103,8 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File create_shortcut.ps1  # 创建桌�
 ### Windows
 
 - 双击桌面深灰底鲸鱼快捷方式 → 自动拉起 `dsh` 并打开页面。
-- 右键托盘鲸鱼 →「打开 / 退出」（退出会停 `dsh` 并关闭 dsh 浏览器窗口）。
+- 右键托盘鲸鱼 →「打开 / 重启 / 退出」（退出会停 `dsh` 并关闭 dsh 浏览器窗口）。
+- 开机自启用 `--silent`：托盘照常在，`dsh` 照常在后台跑，但不会自动弹浏览器；桌面快捷方式不带该参数，双击仍然打开页面。
 - 日志：`%LOCALAPPDATA%\DshWebLauncher\launcher.log`。
 - 自检：`DshWebLauncher.exe --check`。
 
@@ -104,19 +112,23 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File create_shortcut.ps1  # 创建桌�
 
 ```mermaid
 flowchart LR
-  A[启动快捷方式] --> B{端口 3080 在监听?}
+  A[启动快捷方式] --> A2{带 --silent?}
+  A2 -- 是 --> S[静默模式：只到「显示图标」，不开页面]
+  A2 -- 否 --> B{端口 3080 在监听?}
   B -- 否 --> C[后台拉起 dsh web --no-open]
   C --> D[轮询至就绪]
   D --> E[显示图标 + 打开页面]
   B -- 是 --> E
+  S --> F
   E --> F[常驻监测]
+  F -- 右键重启 --> I[停 dsh + 重新拉起]
   F -- 服务停止 --> G[图标消失 + 退出]
   F -- 右键退出 --> H[停 dsh + 关浏览器窗口 + 退出]
 ```
 
 更细的启动链路：
 
-`单实例锁 → 探测 127.0.0.1:3080 → 未运行则拉起 dsh web --no-open → 短周期轮询至就绪（解析 token 地址）→ 打开浏览器 → 常驻监测：连续 2 次探测失败即退出。`
+`单实例锁 → 探测 127.0.0.1:3080 → 未运行则拉起 dsh web --no-open → 短周期轮询至就绪（解析 token 地址）→ 打开浏览器（--silent 时跳过）→ 常驻监测：连续 2 次探测失败即退出。`
 
 ## 📁 目录结构
 

@@ -8,10 +8,12 @@
 
 - **托盘图标存在 ⇔ dsh 在后台运行**：启动器只在 dsh 服务就绪后才创建托盘图标；服务停止后启动器自动退出，图标随之消失。
 - **托盘鲸鱼为白色**（白色主体 + 细深色描边，深浅色任务栏都能看清）。
-- **右键菜单只有两个按钮**：**打开 DeepSeek Harness** / **退出**（无状态项）。
+- **右键菜单只有三个按钮**：**打开** / **重启** / **退出**（不写应用名，无状态项）。
 - **打开页面**：服务未运行会自动拉起 `dsh web --no-open`，就绪后用浏览器打开（优先用日志里的 `?token=` 地址）。
+- **重启**：先停掉 dsh（进程树 + 3080 监听），再重新拉起，就绪后打开页面。
 - **退出**：**连同 dsh 一起停掉**（结束 dsh 进程树 + 停止 3080 监听），随后退出启动器。
 - **单实例**：重复启动只会唤醒已有实例打开页面，不会重复拉起 dsh。
+- **`--silent` 静默启动**：托盘照常常驻、dsh 照常后台拉起，但**不打开浏览器**；已在运行时带 `--silent` 的第二实例直接退出，不会唤醒托盘去开页面。专供开机自启使用。
 - **快速启动**：用 `GetExtendedTcpTable` 瞬时读 TCP 监听表探测端口，不发起连接、不挂起，启动器自身启动约 0.3s（`dsh web` 启动约需 6s）。
 
 由此保证：**任何时刻，托盘图标存在 ⇔ dsh 在后台运行；图标消失 ⇔ dsh 已停止**。
@@ -32,6 +34,15 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File build.ps1
 
 产物：`dist\DshWebLauncher.exe`。要求本机装有 **.NET 9 Windows Desktop Runtime**（本机已满足）。自检：`DshWebLauncher.exe --check` 会写 `%LOCALAPPDATA%\DshWebLauncher\check.txt`。
 
+命令行参数：
+
+| 参数 | 作用 |
+| --- | --- |
+| （无） | 托盘常驻；dsh 未运行则拉起，就绪后打开浏览器页面 |
+| `--silent` | 托盘常驻 + 后台拉起 dsh，**不打开浏览器**（开机自启用） |
+| `--check` | 只做环境自检并写 `check.txt`，不常驻 |
+| `--quit` | 让已在运行的实例停掉 dsh 并退出 |
+
 ## 桌面快捷方式
 
 ```powershell
@@ -39,6 +50,18 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File create_shortcut.ps1
 ```
 
 会在桌面创建 **「DeepSeek Harness」** 快捷方式，图标为**深灰圆角底 + 居中的大号白色鲸鱼**（鲸鱼约占图标 80% 宽），使用 `dist\dsh_app.ico` 的多尺寸大图，双击即打开启动器。
+
+## 开机自启（后台驻留、不弹窗）
+
+把 `--silent` 写进当前用户的 Run 键即可，登录后只有托盘图标出现，不会弹出浏览器：
+
+```powershell
+$exe = (Resolve-Path 'dist\DshWebLauncher.exe').Path
+New-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' `
+    -Name 'DeepSeek Harness' -Value "`"$exe`" --silent" -PropertyType String -Force
+```
+
+桌面快捷方式**不带** `--silent`，用户主动双击时仍然会打开浏览器页面。
 
 ## 重新生成图标
 

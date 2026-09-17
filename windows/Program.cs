@@ -31,6 +31,7 @@ internal static class Program
 
         bool check = args.Length > 0 && string.Equals(args[0], "--check", StringComparison.OrdinalIgnoreCase);
         bool quit = args.Any(a => string.Equals(a, "--quit", StringComparison.OrdinalIgnoreCase));
+        bool silent = args.Any(a => string.Equals(a, "--silent", StringComparison.OrdinalIgnoreCase));
 
         if (check)
         {
@@ -43,6 +44,10 @@ internal static class Program
         {
             if (!owned)
             {
+                // Autostart instance: if the tray is already running, do not
+                // foreground a browser page just because Windows re-launched us.
+                if (silent)
+                    return 0;
                 try
                 {
                     if (quit)
@@ -59,7 +64,7 @@ internal static class Program
             if (quit)
                 return 0; // 没有在跑的主实例，无需退出
 
-            Application.Run(new TrayApp());
+            Application.Run(new TrayApp(silent));
         }
         return 0;
     }
@@ -341,10 +346,12 @@ internal static class Program
         private DateTime _startedAt = DateTime.MinValue;
         private int _downTicks;
         private bool _forceShutdown;
+        private bool _silentStart;
         private System.Diagnostics.Process? _dshProcess;
 
-        public TrayApp()
+        public TrayApp(bool silentStart)
         {
+            _silentStart = silentStart;
             // 0) 单实例信号尽早建立，第二实例可立即唤醒/退出
             _activate = new EventWaitHandle(false, EventResetMode.AutoReset, ActivateSignalName);
             _quit = new EventWaitHandle(false, EventResetMode.AutoReset, QuitSignalName);
@@ -369,7 +376,8 @@ internal static class Program
             {
                 _everUp = true;
                 _tray.ShowIcon();
-                OpenPage(_startedByUs);
+                if (!_silentStart)
+                    OpenPage(_startedByUs);
             }
 
             // 5) 启动阶段用较快轮询，服务就绪即开页面；就绪后再用 2s 监测。
@@ -412,7 +420,8 @@ internal static class Program
                 if (_starting && !_openedAfterStart)
                 {
                     _openedAfterStart = true;
-                    OpenPage(_startedByUs);
+                    if (!_silentStart)
+                        OpenPage(_startedByUs);
                 }
                 _starting = false;
                 _startedByUs = false;
@@ -531,6 +540,7 @@ internal static class Program
             _everUp = false;
             _startAttempts = 0;
             _downTicks = 0;
+            _silentStart = false;
             _tray?.HideIcon();
             StartService();             // 重新拉起 dsh，就绪后由 OnTick 亮图标并打开页面
         }
@@ -625,8 +635,21 @@ internal static class Program
             }
         }
 
-        private static void ShowFatal(string message)
+        private void ShowFatal(string message)
         {
+            if (_silentStart)
+            {
+                try
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(LogPath) ?? string.Empty);
+                    File.AppendAllText(LogPath,
+                        $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} [silent startup] {message}{Environment.NewLine}");
+                }
+                catch
+                {
+                }
+                return;
+            }
             try
             {
                 MessageBox.Show(message, "DeepSeek Harness", MessageBoxButtons.OK, MessageBoxIcon.Error);
